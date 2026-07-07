@@ -5,8 +5,14 @@
 #include <numeric>
 #include <chrono>
 #include<thread>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <condition_variable>
 
-
+using namespace std;
+std::mutex pmtx;
 enum class AccessType
 {
     READ,
@@ -17,7 +23,7 @@ struct alignas(128) AccessLog
     AccessType type;
     void* address;
     size_t size;
-    std::thread::id threadId;
+    // std::thread::id threadId;
 };
 
 
@@ -26,26 +32,27 @@ class Logger
 public:
     void logAccess(AccessType type, void* address, size_t size)
     {
-        size_t slot = LOG_INDEX.fetch_add(1, std::memory_order_relaxed);
+        // size_t slot = LOG_INDEX.fetch_add(1, std::memory_order_relaxed);
+        size_t slot = LOG_INDEX++;
         if(slot>=MAX_LOGS)
         {
             // std::cout<<"LOGGER BROKE"<<std::endl;
             return;
         }
-        buffer[slot] = {type, address, size, std::this_thread::get_id()};
+        buffer[slot] = {type, address, size};
     }
     void dumpLogs()
     {
         
-        for (size_t i = 0; i < MAX_LOGS; ++i)
+        for (size_t i = 0; i < LOG_INDEX; ++i)
         {
             const AccessLog& log = buffer[i];
             std::cout << "Access Type: " << (log.type == AccessType::READ ? "READ" : "WRITE")
                       << ", Address: " << log.address
-                      << ", Size: " << log.size << std::endl
-                      << "Thread ID: " << log.threadId << std::endl;
+                      << ", Size: " << log.size << std::endl;
             std::cout<<"Size error:"<<(log.size!=sizeof(int))<<std::endl;
         }
+
     }
     uintptr_t checksum() const
     {
@@ -63,25 +70,28 @@ public:
     void resetIndex(){
         LOG_INDEX = 0;
     }
-    int getIndex() const{
+    size_t getIndex() const{
         return LOG_INDEX;
     }
 private:
     static const size_t MAX_LOGS = 100000;
     AccessLog buffer[MAX_LOGS];
-    std::atomic<size_t> LOG_INDEX{0};
+    // std::atomic<size_t> LOG_INDEX{0};
+    size_t LOG_INDEX = 0;
 
 };
 
+thread_local Logger logger;
+
 template <typename T>
-T loggedRead(T* address, Logger& logger){
+T loggedRead(T* address){
     // std::cout << "Reading from address: " << address << std::endl;
     logger.logAccess(AccessType::READ, address, sizeof(T));
     return *address;
 }
 
 template <typename T>
-void loggedWrite(T* address, T value, Logger& logger){
+void loggedWrite(T* address, T value){
     // std::cout << "Writing to address: " << address << " with value: " << value << std::endl;
     logger.logAccess(AccessType::WRITE, address, sizeof(T));
     *address = value;
@@ -93,15 +103,22 @@ void loggedWrite(T* address, T value, Logger& logger){
 // }
 
 
-void funcTest(Logger& logger, int* data){
+void funcTest(int* data){
+    logger.resetIndex();
     const int REPEATS = 1'000;
     const int N       = 32;
         for (int r = 0; r < REPEATS; ++r){
             for (int i = 0; i < N; ++i) {
                 // std::cout<<"thread id:"<<std::this_thread::get_id()<<" r:"<<r<<" i:"<<i<<std::endl;
-                loggedRead(&data[i],logger);
-                loggedWrite(&data[i], i,logger);
+                loggedRead(&data[i]);
+                loggedWrite(&data[i], i);
             }
+        }
+        {
+            std::unique_lock<std::mutex> lock(pmtx);
+            logger.dumpLogs();
+            std::cout<<"thread id:"<<std::this_thread::get_id()<<" log checksum  = " << logger.checksum() << '\n';
+            // lock.unlock();
         }
 }
 
@@ -112,15 +129,11 @@ int main() {
     const int REPEATS = 1'000;
     const int N       = 32;
     int data[N];
+    int data2[N];
     {
-        auto logger = std::make_unique<Logger>();
-        std::thread t1(funcTest,std::ref(*logger),data);
-        std::thread t2(funcTest,std::ref(*logger),data);
-        t1.join();
-        t2.join();
-
-        std::cout<<"total entries"<<logger->getIndex()<<std::endl;
-        logger->dumpLogs();
+        // auto logger = std::make_unique<Logger>();
+        std::jthread t1(funcTest,data);
+        std::jthread t2(funcTest,data2);
     }
 
 
