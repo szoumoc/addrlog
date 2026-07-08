@@ -137,9 +137,9 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
     }
     
     double avg = static_cast<double>(sum) / strides.size();
-    
     std::cout << label << " strides:\n";
     std::cout << "  Total: " << strides.size() << "\n";
+    std::cout << "  Sum: " << sum << " bytes\n";
     std::cout << "  Average: " << avg << " bytes\n";
     std::cout << "  Min: " << min_stride << " bytes\n";
     std::cout << "  Max: " << max_stride << " bytes\n";
@@ -155,14 +155,6 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
         std::cout << "    " << stride << " bytes: " << count_ 
                   << " (" << percentage << "%)\n";
     }
-    
-    // Cache line analysis
-    int same_cache_line = 0;
-    for (int s : strides) {
-        if (abs(s) < 64) same_cache_line++;
-    }
-    std::cout << "  Same cache line (|stride| < 64): " << same_cache_line
-              << " (" << (100.0 * same_cache_line / strides.size()) << "%)\n";
 }
 
 
@@ -188,12 +180,17 @@ void analyzeStrides() {
             write_addrs.push_back(addr);
         }
     }
-    
+    int cache_line_changes = 0;
     // Analyze READ strides
     std::vector<int> read_strides;
     for (size_t i = 1; i < read_addrs.size(); ++i) {
         int stride = static_cast<int>(read_addrs[i] - read_addrs[i-1]);
         read_strides.push_back(stride);
+        //cache line analysis
+        if(read_addrs[i]/128 != read_addrs[i-1]/128){
+            ++cache_line_changes;
+        }
+
     }
     printStrideStats(read_strides, "READ");
     
@@ -202,8 +199,13 @@ void analyzeStrides() {
     for (size_t i = 1; i < write_addrs.size(); ++i) {
         int stride = static_cast<int>(write_addrs[i] - write_addrs[i-1]);
         write_strides.push_back(stride);
+        //cache line analysis
+        if(write_addrs[i]/128 != write_addrs[i-1]/128){
+            ++cache_line_changes;
+        }
     }
     printStrideStats(write_strides, "WRITE");
+    std::cout << "Total cache line changes: " << cache_line_changes << std::endl;
 }
 
 
@@ -230,7 +232,27 @@ void funcTest(int* data){
 }
 
 
-
+void funcTest2(int* data, int* indices){
+    std::cout<<"thread id:"<<std::this_thread::get_id()<<" start funcTest2"<<std::endl;
+    logger.resetIndex();
+    const int REPEATS = 1'000;
+    const int N       = 32;
+        for (int r = 0; r < REPEATS; ++r){
+            for (int i = 0; i < N; ++i) {
+                // std::cout<<"thread id:"<<std::this_thread::get_id()<<" r:"<<r<<" i:"<<i<<std::endl;
+                // data[indices[i]] = i;
+                loggedRead(&data[indices[i]]);
+                loggedWrite(&data[indices[i]], i);
+            }
+        }
+        {
+            std::unique_lock<std::mutex> lock(pmtx);
+            // logger.dumpLogs();
+            analyzeStrides();
+            std::cout<<"thread id:"<<std::this_thread::get_id()<<" log checksum  = " << logger.checksum() << '\n';
+            // lock.unlock();
+        }
+}
 
 
 int main() {
@@ -239,10 +261,21 @@ int main() {
     const int N       = 32;
     int data[N];
     int data2[N];
+    int indices[N];
+    for(int i = 0; i < N; ++i) indices[i] = i;  // Initialize first!
+
+    // Then shuffle
+    for(int i = 31; i >= 0; --i){
+        int j = rand() % (i + 1);
+        std::swap(indices[i], indices[j]);
+    }
+
     {
         // auto logger = std::make_unique<Logger>();
-        std::jthread t1(funcTest,data);
-        std::jthread t2(funcTest,data2);
+        // std::jthread t1(funcTest,data);
+        // std::jthread t2(funcTest,data2);
+        std::jthread t3(funcTest2,data, indices);
+        std::jthread t4(funcTest2,data2, indices);
     }
 
 
