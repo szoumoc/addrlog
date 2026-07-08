@@ -10,6 +10,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <condition_variable>
+#include <map>
 
 using namespace std;
 std::mutex pmtx;
@@ -18,7 +19,7 @@ enum class AccessType
     READ,
     WRITE
 };
-struct alignas(128) AccessLog
+struct AccessLog
 {
     AccessType type;
     void* address;
@@ -114,19 +115,98 @@ void loggedWrite(T* address, T value){
 
 
 
-void accessLogsStride(){
+void printStrideStats(const std::vector<int>& strides, const std::string& label) {
+    if (strides.empty()) {
+        std::cout << label << ": No strides to analyze\n";
+        return;
+    }
+    
+    // Count frequency of each stride
+    std::map<int, int> freq;
+    int sum = 0;
+    int zero_count = 0;
+    int max_stride = INT_MIN;
+    int min_stride = INT_MAX;
+    
+    for (int s : strides) {
+        freq[s]++;
+        sum += s;
+        if (s == 0) zero_count++;
+        max_stride = std::max(max_stride, s);
+        min_stride = std::min(min_stride, s);
+    }
+    
+    double avg = static_cast<double>(sum) / strides.size();
+    
+    std::cout << label << " strides:\n";
+    std::cout << "  Total: " << strides.size() << "\n";
+    std::cout << "  Average: " << avg << " bytes\n";
+    std::cout << "  Min: " << min_stride << " bytes\n";
+    std::cout << "  Max: " << max_stride << " bytes\n";
+    std::cout << "  Zero strides: " << zero_count 
+              << " (" << (100.0 * zero_count / strides.size()) << "%)\n";
+    
+    // Show top 5 most common strides
+    std::cout << "  Most common strides:\n";
+    int count = 0;
+    for (const auto& [stride, count_] : freq) {
+        if (count++ >= 5) break;
+        double percentage = 100.0 * count_ / strides.size();
+        std::cout << "    " << stride << " bytes: " << count_ 
+                  << " (" << percentage << "%)\n";
+    }
+    
+    // Cache line analysis
+    int same_cache_line = 0;
+    for (int s : strides) {
+        if (abs(s) < 64) same_cache_line++;
+    }
+    std::cout << "  Same cache line (|stride| < 64): " << same_cache_line
+              << " (" << (100.0 * same_cache_line / strides.size()) << "%)\n";
+}
+
+
+void analyzeStrides() {
     std::vector<AccessLog> logs;
     logger.getLogs(logs);
-    const size_t stride = 32;
-    int maxStride = 0;
-    for (size_t i = 1; i < logs.size(); i += 2)
-    {
-        const AccessLog& log = logs[i];
-        uintptr_t address = reinterpret_cast<uintptr_t>(log.address);
-        maxStride = std::max(maxStride, static_cast<int>(address % stride)); 
+    
+    if (logs.size() < 2) {
+        std::cout << "Not enough logs for stride analysis\n";
+        return;
     }
-    std::cout << "Maximum stride: " << maxStride << std::endl;  
+    
+    std::cout << "\n=== OPTION B: Type-Separated Strides ===\n";
+    
+    std::vector<uintptr_t> read_addrs;
+    std::vector<uintptr_t> write_addrs;
+    
+    for (const auto& log : logs) {
+        uintptr_t addr = reinterpret_cast<uintptr_t>(log.address);
+        if (log.type == AccessType::READ) {
+            read_addrs.push_back(addr);
+        } else {
+            write_addrs.push_back(addr);
+        }
+    }
+    
+    // Analyze READ strides
+    std::vector<int> read_strides;
+    for (size_t i = 1; i < read_addrs.size(); ++i) {
+        int stride = static_cast<int>(read_addrs[i] - read_addrs[i-1]);
+        read_strides.push_back(stride);
+    }
+    printStrideStats(read_strides, "READ");
+    
+    // Analyze WRITE strides
+    std::vector<int> write_strides;
+    for (size_t i = 1; i < write_addrs.size(); ++i) {
+        int stride = static_cast<int>(write_addrs[i] - write_addrs[i-1]);
+        write_strides.push_back(stride);
+    }
+    printStrideStats(write_strides, "WRITE");
 }
+
+
 
 
 void funcTest(int* data){
@@ -143,7 +223,7 @@ void funcTest(int* data){
         {
             std::unique_lock<std::mutex> lock(pmtx);
             // logger.dumpLogs();
-            accessLogsStride();
+            analyzeStrides();
             std::cout<<"thread id:"<<std::this_thread::get_id()<<" log checksum  = " << logger.checksum() << '\n';
             // lock.unlock();
         }
