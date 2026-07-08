@@ -67,6 +67,16 @@ public:
 
         return sum;
     }
+    void getLogs(std::vector<AccessLog>& logs) const
+    {
+        logs.clear();
+        logs.reserve(LOG_INDEX);
+        for (size_t i = 0; i < LOG_INDEX; ++i)
+        {
+            logs.push_back(buffer[i]);
+        }
+    }
+
     void resetIndex(){
         LOG_INDEX = 0;
     }
@@ -103,6 +113,22 @@ void loggedWrite(T* address, T value){
 // }
 
 
+
+void accessLogsStride(){
+    std::vector<AccessLog> logs;
+    logger.getLogs(logs);
+    const size_t stride = 32;
+    int maxStride = 0;
+    for (size_t i = 1; i < logs.size(); i += 2)
+    {
+        const AccessLog& log = logs[i];
+        uintptr_t address = reinterpret_cast<uintptr_t>(log.address);
+        maxStride = std::max(maxStride, static_cast<int>(address % stride)); 
+    }
+    std::cout << "Maximum stride: " << maxStride << std::endl;  
+}
+
+
 void funcTest(int* data){
     logger.resetIndex();
     const int REPEATS = 1'000;
@@ -116,11 +142,14 @@ void funcTest(int* data){
         }
         {
             std::unique_lock<std::mutex> lock(pmtx);
-            logger.dumpLogs();
+            // logger.dumpLogs();
+            accessLogsStride();
             std::cout<<"thread id:"<<std::this_thread::get_id()<<" log checksum  = " << logger.checksum() << '\n';
             // lock.unlock();
         }
 }
+
+
 
 
 
