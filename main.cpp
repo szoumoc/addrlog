@@ -4,7 +4,7 @@
 #include <vector>
 #include <numeric>
 #include <chrono>
-#include<thread>
+#include <thread>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -24,50 +24,21 @@ struct AccessLog
     AccessType type;
     void* address;
     size_t size;
-    // std::thread::id threadId;
 };
-
 
 class Logger
 {
 public:
     void logAccess(AccessType type, void* address, size_t size)
     {
-        // size_t slot = LOG_INDEX.fetch_add(1, std::memory_order_relaxed);
         size_t slot = LOG_INDEX++;
-        if(slot>=MAX_LOGS)
+        if(slot >= MAX_LOGS)
         {
-            // std::cout<<"LOGGER BROKE"<<std::endl;
             return;
         }
         buffer[slot] = {type, address, size};
     }
-    void dumpLogs()
-    {
-        
-        for (size_t i = 0; i < LOG_INDEX; ++i)
-        {
-            const AccessLog& log = buffer[i];
-            std::cout << "Access Type: " << (log.type == AccessType::READ ? "READ" : "WRITE")
-                      << ", Address: " << log.address
-                      << ", Size: " << log.size << std::endl;
-            std::cout<<"Size error:"<<(log.size!=sizeof(int))<<std::endl;
-        }
-
-    }
-    uintptr_t checksum() const
-    {
-        uintptr_t sum = 0;
-
-        for (size_t i = 0; i < LOG_INDEX; ++i)
-        {
-            sum += reinterpret_cast<uintptr_t>(buffer[i].address);
-            sum += buffer[i].size;
-            sum += static_cast<uintptr_t>(buffer[i].type);
-        }
-
-        return sum;
-    }
+    
     void getLogs(std::vector<AccessLog>& logs) const
     {
         logs.clear();
@@ -84,36 +55,38 @@ public:
     size_t getIndex() const{
         return LOG_INDEX;
     }
-private:
-    static const size_t MAX_LOGS = 100000;
-    AccessLog buffer[MAX_LOGS];
-    // std::atomic<size_t> LOG_INDEX{0};
-    size_t LOG_INDEX = 0;
+    uintptr_t checksum() const
+    {
+        uintptr_t sum = 0;
 
+        for (size_t i = 0; i < LOG_INDEX; ++i)
+        {
+            sum += reinterpret_cast<uintptr_t>(buffer[i].address);
+            sum += buffer[i].size;
+            sum += static_cast<uintptr_t>(buffer[i].type);
+        }
+
+        return sum;
+    }
+private:
+    static const size_t MAX_LOGS = 1000000;  // Increased for larger workloads
+    AccessLog buffer[MAX_LOGS];
+    size_t LOG_INDEX = 0;
 };
 
 thread_local Logger logger;
 
 template <typename T>
 T loggedRead(T* address){
-    // std::cout << "Reading from address: " << address << std::endl;
     logger.logAccess(AccessType::READ, address, sizeof(T));
     return *address;
 }
 
 template <typename T>
 void loggedWrite(T* address, T value){
-    // std::cout << "Writing to address: " << address << " with value: " << value << std::endl;
     logger.logAccess(AccessType::WRITE, address, sizeof(T));
     *address = value;
 }
-
-
-// void loggerReset(Logger& logger){
-//     logger.resetIndex();
-// }
-
-
 
 void printStrideStats(const std::vector<int>& strides, const std::string& label) {
     if (strides.empty()) {
@@ -121,9 +94,8 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
         return;
     }
     
-    // Count frequency of each stride
     std::map<int, int> freq;
-    int sum = 0;
+    long long sum = 0;  // Use long long to avoid overflow
     int zero_count = 0;
     int max_stride = INT_MIN;
     int min_stride = INT_MAX;
@@ -146,17 +118,15 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
     std::cout << "  Zero strides: " << zero_count 
               << " (" << (100.0 * zero_count / strides.size()) << "%)\n";
     
-    // Show top 5 most common strides
     std::cout << "  Most common strides:\n";
     int count = 0;
-    for (const auto& [stride, count_] : freq) {
+    for (const auto& pair : freq) {
         if (count++ >= 5) break;
-        double percentage = 100.0 * count_ / strides.size();
-        std::cout << "    " << stride << " bytes: " << count_ 
+        double percentage = 100.0 * pair.second / strides.size();
+        std::cout << "    " << pair.first << " bytes: " << pair.second 
                   << " (" << percentage << "%)\n";
     }
 }
-
 
 void analyzeStrides() {
     std::vector<AccessLog> logs;
@@ -168,6 +138,7 @@ void analyzeStrides() {
     }
     
     std::cout << "\n=== OPTION B: Type-Separated Strides ===\n";
+    std::cout << "Total log entries: " << logs.size() << "\n";
     
     std::vector<uintptr_t> read_addrs;
     std::vector<uintptr_t> write_addrs;
@@ -180,157 +151,111 @@ void analyzeStrides() {
             write_addrs.push_back(addr);
         }
     }
-    int cache_line_changes = 0;
+    
+    const int CACHE_LINE_BITS = 7;  // 2^7 = 128 bytes
+    int read_cache_changes = 0;
+    int write_cache_changes = 0;
+    
     // Analyze READ strides
     std::vector<int> read_strides;
     for (size_t i = 1; i < read_addrs.size(); ++i) {
         int stride = static_cast<int>(read_addrs[i] - read_addrs[i-1]);
         read_strides.push_back(stride);
-        //cache line analysis
-        if(read_addrs[i]/128 != read_addrs[i-1]/128){
-            ++cache_line_changes;
+        if ((read_addrs[i] >> CACHE_LINE_BITS) != (read_addrs[i-1] >> CACHE_LINE_BITS)) {
+            read_cache_changes++;
         }
-
     }
     printStrideStats(read_strides, "READ");
+    std::cout << "  READ cache line changes: " << read_cache_changes 
+              << " (" << (100.0 * read_cache_changes / read_strides.size()) << "%)\n";
     
     // Analyze WRITE strides
     std::vector<int> write_strides;
     for (size_t i = 1; i < write_addrs.size(); ++i) {
         int stride = static_cast<int>(write_addrs[i] - write_addrs[i-1]);
         write_strides.push_back(stride);
-        //cache line analysis
-        if(write_addrs[i]/128 != write_addrs[i-1]/128){
-            ++cache_line_changes;
+        if ((write_addrs[i] >> CACHE_LINE_BITS) != (write_addrs[i-1] >> CACHE_LINE_BITS)) {
+            write_cache_changes++;
         }
     }
     printStrideStats(write_strides, "WRITE");
-    std::cout << "Total cache line changes: " << cache_line_changes << std::endl;
+    std::cout << "  WRITE cache line changes: " << write_cache_changes 
+              << " (" << (100.0 * write_cache_changes / write_strides.size()) << "%)\n";
 }
 
-
-
-
-void funcTest(int* data){
+// Sequential access test (large array)
+void funcTestSequential(int* data, int N) {
+    std::cout << "Thread " << std::this_thread::get_id() << ": Starting SEQUENTIAL test (N=" << N << ")\n";
     logger.resetIndex();
-    const int REPEATS = 1'000;
-    const int N       = 32;
-        for (int r = 0; r < REPEATS; ++r){
-            for (int i = 0; i < N; ++i) {
-                // std::cout<<"thread id:"<<std::this_thread::get_id()<<" r:"<<r<<" i:"<<i<<std::endl;
-                loggedRead(&data[i]);
-                loggedWrite(&data[i], i);
-            }
+    
+    const int REPEATS = 1;  // One pass to avoid log overflow
+    
+    for (int r = 0; r < REPEATS; ++r) {
+        for (int i = 0; i < N; ++i) {
+            loggedRead(&data[i]);
+            loggedWrite(&data[i], i);
         }
-        {
-            std::unique_lock<std::mutex> lock(pmtx);
-            // logger.dumpLogs();
-            analyzeStrides();
-            std::cout<<"thread id:"<<std::this_thread::get_id()<<" log checksum  = " << logger.checksum() << '\n';
-            // lock.unlock();
-        }
+    }
+    
+    {
+        std::unique_lock<std::mutex> lock(pmtx);
+        analyzeStrides();
+        std::cout << "Thread " << std::this_thread::get_id() << ": log checksum = " << logger.checksum() << '\n';
+    }
 }
 
-
-void funcTest2(int* data, int* indices){
-    std::cout<<"thread id:"<<std::this_thread::get_id()<<" start funcTest2"<<std::endl;
+// Random access test (large array with shuffled indices)
+void funcTestRandom(int* data, int* indices, int N) {
+    std::cout << "Thread " << std::this_thread::get_id() << ": Starting RANDOM test (N=" << N << ")\n";
     logger.resetIndex();
-    const int REPEATS = 1'000;
-    const int N       = 32;
-        for (int r = 0; r < REPEATS; ++r){
-            for (int i = 0; i < N; ++i) {
-                // std::cout<<"thread id:"<<std::this_thread::get_id()<<" r:"<<r<<" i:"<<i<<std::endl;
-                // data[indices[i]] = i;
-                loggedRead(&data[indices[i]]);
-                loggedWrite(&data[indices[i]], i);
-            }
+    
+    const int REPEATS = 1;  // One pass
+    
+    for (int r = 0; r < REPEATS; ++r) {
+        for (int i = 0; i < N; ++i) {
+            int idx = indices[i];
+            loggedRead(&data[idx]);
+            loggedWrite(&data[idx], i);
         }
-        {
-            std::unique_lock<std::mutex> lock(pmtx);
-            // logger.dumpLogs();
-            analyzeStrides();
-            std::cout<<"thread id:"<<std::this_thread::get_id()<<" log checksum  = " << logger.checksum() << '\n';
-            // lock.unlock();
-        }
+    }
+    
+    {
+        std::unique_lock<std::mutex> lock(pmtx);
+        analyzeStrides();
+        std::cout << "Thread " << std::this_thread::get_id() << ": log checksum = " << logger.checksum() << '\n';
+    }
 }
-
 
 int main() {
-
-    const int REPEATS = 1'000;
-    const int N       = 32;
-    int data[N];
-    int data2[N];
-    int indices[N];
-    for(int i = 0; i < N; ++i) indices[i] = i;  // Initialize first!
-
-    // Then shuffle
-    for(int i = 31; i >= 0; --i){
-        int j = rand() % (i + 1);
-        std::swap(indices[i], indices[j]);
+    // Choose size that exceeds cache but fits in log buffer
+    // Each access logs 24 bytes, so with 1M log entries we can track ~42K accesses
+    const int N = 10000;  // 10K ints = 40KB (exceeds L1 but fits in L2)
+    
+    int* data = new int[N];
+    int* data2 = new int[N];
+    int* indices = new int[N];
+    
+    // Initialize data
+    for(int i = 0; i < N; ++i) {
+        data[i] = i;
+        data2[i] = i;
+        indices[i] = i;
     }
-
+    
+    // Shuffle indices for random access
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::shuffle(indices, indices + N, gen);
+    
     {
-        // auto logger = std::make_unique<Logger>();
-        // std::jthread t1(funcTest,data);
-        // std::jthread t2(funcTest,data2);
-        std::jthread t3(funcTest2,data, indices);
-        std::jthread t4(funcTest2,data2, indices);
+        // Test sequential vs random
+        std::jthread t1(funcTestSequential, data, N);
+        std::jthread t2(funcTestRandom, data2, indices, N);
     }
-
-
-    // {
-    //     Logger logger;
-    //     long long sum = 0;
-
-    //     auto startA = std::chrono::high_resolution_clock::now();
-
-    //     for (int r = 0; r < REPEATS; ++r)
-    //     {
-    //         for (int i = 0; i < N; ++i)
-    //         {
-    //             loggedRead(&data[i],logger);
-    //             loggedWrite(&data[i], i,logger);
-    //         }
-    //     }
-
-    //     auto endA = std::chrono::high_resolution_clock::now();
-
-    //     long long totalA =
-    //         std::chrono::duration_cast<std::chrono::nanoseconds>(endA - startA).count();
-
-    //     std::cout << "Variant A (logged):\n";
-    //     std::cout << "  total      = " << totalA << " ns\n";
-    //     // std::cout << "  per-access = "
-    //     //         << totalA / (2LL * N * REPEATS)
-    //     //         << " ns\n";
-
-    //     // std::cout << "Read checksum = " << sum << '\n';
-    //     std::cout << "Log checksum  = " << logger.checksum() << '\n';
-    // }
-    // {
-    //     // volatile long long dummy = 0;
-    //     volatile long long sum = 0;
-
-    //     auto startB = std::chrono::high_resolution_clock::now();
-
-    //     for (int r = 0; r < REPEATS; ++r){
-    //         for (int i = 0; i < N; ++i) {
-    //             data[i] = i;
-    //             sum += data[i];
-    //         }
-    //     }
-
-    //     auto endB = std::chrono::high_resolution_clock::now();
-    //     // dummy = sum;
-
-    //     long long totalB =
-    //         std::chrono::duration_cast<std::chrono::nanoseconds>(endB - startB).count();
-
-    //     std::cout << "Variant B (raw)    :\n"
-    //               << "total = " << totalB << " ns\n"
-    //               << "sum=" << sum<<"\n";
-    // }
-    // std::cout<<"size:"<<sizeof(AccessLog);
+    
+    delete[] data;
+    delete[] data2;
+    delete[] indices;
+    
     return 0;
-}  
+}
