@@ -1,0 +1,153 @@
+#pragma once
+
+const char* HTML_PREFIX = R"RAWHTML(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memtrace</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#f8fafc;padding:2rem;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto}
+h1{font-size:1.5rem;font-weight:600;margin-bottom:1.5rem;color:#38bdf8}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
+.stat{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 18px}
+.stat-label{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.stat-val{font-size:22px;font-weight:600}
+.card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:1rem;margin-bottom:1rem}
+.card-title{font-size:13px;font-weight:600;margin-bottom:3px}
+.card-sub{font-size:11px;color:#94a3b8;margin-bottom:10px}
+canvas{width:100%;height:280px;border-radius:6px;border:1px solid #334155;cursor:crosshair;display:block;background:#0f172a}
+.legend{display:flex;gap:16px;margin-top:8px;font-size:11px;color:#94a3b8}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
+.tip{position:fixed;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:12px;pointer-events:none;opacity:0;z-index:100}
+.tip-row{display:flex;justify-content:space-between;gap:12px;margin-bottom:2px}
+.tip-row:last-child{margin-bottom:0}
+.tip-k{color:#94a3b8}
+.tip-v{font-family:monospace;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Memtrace</h1>
+<div class="stats">
+  <div class="stat"><div class="stat-label">Total accesses</div><div class="stat-val" id="s-total">—</div></div>
+  <div class="stat"><div class="stat-label">Reads</div><div class="stat-val" id="s-reads" style="color:#4ade80">—</div></div>
+  <div class="stat"><div class="stat-label">Writes</div><div class="stat-val" id="s-writes" style="color:#f87171">—</div></div>
+  <div class="stat"><div class="stat-label">Unique addresses</div><div class="stat-val" id="s-unique">—</div></div>
+</div>
+<div class="card">
+  <div class="card-title">Access timeline</div>
+  <div class="card-sub">X = access index · Y = memory address · sequential → diagonal · random → scatter</div>
+  <canvas id="c-timeline"></canvas>
+  <div class="legend">
+    <span><span class="dot" style="background:#4ade80"></span>Read</span>
+    <span><span class="dot" style="background:#f87171"></span>Write</span>
+  </div>
+</div>
+<div class="card">
+  <div class="card-title">Cache line heatmap (64 B)</div>
+  <div class="card-sub">Each cell = one 64-byte cache line · blue = cold · red = hot</div>
+  <canvas id="c-heat"></canvas>
+</div>
+<div id="tip-t" class="tip"></div>
+<div id="tip-h" class="tip"></div>
+</div>
+<script>
+const DATA = )RAWHTML";
+
+const char* HTML_SUFFIX = R"RAWHTML(;
+
+function row(k,v,c){return`<div class="tip-row"><span class="tip-k">${k}</span><span class="tip-v"${c?` style="color:${c}"`:''}>${v}</span></div>`}
+function showTip(tip,e,html){tip.innerHTML=html;tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px';tip.style.opacity='1'}
+function hideTip(tip){tip.style.opacity='0'}
+function fit(c){c.width=c.offsetWidth;c.height=280}
+
+const reads  = DATA.filter(d=>d.type===0).length;
+const writes = DATA.length-reads;
+document.getElementById('s-total').textContent  = DATA.length.toLocaleString();
+document.getElementById('s-reads').textContent  = reads.toLocaleString();
+document.getElementById('s-writes').textContent = writes.toLocaleString();
+document.getElementById('s-unique').textContent = new Set(DATA.map(d=>d.addr)).size.toLocaleString();
+
+function drawTimeline(){
+  const canvas=document.getElementById('c-timeline');
+  fit(canvas);
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const addrs=DATA.map(d=>d.addr);
+  const minA=Math.min(...addrs),maxA=Math.max(...addrs);
+  const range=Math.max(1,maxA-minA);
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let i=1;i<5;i++){ctx.beginPath();ctx.moveTo(0,i*H/5);ctx.lineTo(W,i*H/5);ctx.stroke()}
+  const pt=DATA.length>5000?1:2;
+  DATA.forEach((d,i)=>{
+    const x=(i/DATA.length)*W;
+    const y=H-((d.addr-minA)/range)*H;
+    ctx.fillStyle=d.type===0?'#4ade80':'#f87171';
+    ctx.globalAlpha=DATA.length>10000?0.3:0.75;
+    ctx.fillRect(x,y-pt/2,pt,pt);
+  });
+  ctx.globalAlpha=1;
+  const tip=document.getElementById('tip-t');
+  canvas.onmousemove=e=>{
+    const r=canvas.getBoundingClientRect();
+    const xi=Math.floor(((e.clientX-r.left)/W)*DATA.length);
+    if(xi<0||xi>=DATA.length)return;
+    const d=DATA[xi];
+    showTip(tip,e,
+      row('access #',xi)+
+      row('address','0x'+d.addr.toString(16))+
+      row('size',d.size+' B')+
+      row('type',d.type===0?'READ':'WRITE',d.type===0?'#4ade80':'#f87171')
+    );
+  };
+  canvas.onmouseleave=()=>hideTip(tip);
+}
+
+function drawHeatmap(){
+  const canvas=document.getElementById('c-heat');
+  fit(canvas);
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const CL=64;
+  const lines=new Map();
+  DATA.forEach(d=>{
+    const k=Math.floor(d.addr/CL)*CL;
+    lines.set(k,(lines.get(k)||0)+1);
+  });
+  const keys=Array.from(lines.keys()).sort((a,b)=>a-b);
+  const maxV=Math.max(...lines.values());
+  const cols=Math.ceil(Math.sqrt(keys.length*(W/H)));
+  const cW=W/cols,cH=H/Math.ceil(keys.length/cols);
+  ctx.clearRect(0,0,W,H);
+  keys.forEach((k,i)=>{
+    const v=lines.get(k);
+    ctx.fillStyle=`hsl(${(1-v/maxV)*240},90%,50%)`;
+    ctx.fillRect((i%cols)*cW,Math.floor(i/cols)*cH,cW-1,cH-1);
+  });
+  const tip=document.getElementById('tip-h');
+  canvas.onmousemove=e=>{
+    const r=canvas.getBoundingClientRect();
+    const col=Math.floor((e.clientX-r.left)/cW);
+    const ro=Math.floor((e.clientY-r.top)/cH);
+    const i=ro*cols+col;
+    if(i<0||i>=keys.length)return hideTip(tip);
+    const k=keys[i],v=lines.get(k);
+    showTip(tip,e,
+      row('cache line','0x'+k.toString(16))+
+      row('accesses',v)+
+      row('intensity',Math.round(v/maxV*100)+'%')
+    );
+  };
+  canvas.onmouseleave=()=>hideTip(tip);
+}
+
+drawTimeline();
+drawHeatmap();
+window.addEventListener('resize',()=>{drawTimeline();drawHeatmap()});
+</script>
+</body>
+</html>)RAWHTML";

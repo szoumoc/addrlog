@@ -1,8 +1,11 @@
 #include "memtrace_rt.h"
+#include "memtrace_html.h"
 #include <iostream>
 #include <vector>
 #include <map>
 #include <climits>
+#include <cstdio>
+#include <cstdint>
 
 enum class AccessType {
     READ = 0,
@@ -149,4 +152,24 @@ extern "C" void analyzeAndPrint() {
                   << " (" << (100.0 * write_cache_changes / write_strides.size()) << "%)\n";
 
     std::cout << "Checksum: " << logger.checksum() << "\n";
+
+    // dump self-contained HTML report
+    FILE* f = fopen("memtrace_report.html", "w");
+    if (f) {
+        fprintf(f, "%s", HTML_PREFIX);
+        fprintf(f, "[\n");
+        for (size_t i = 0; i < logs.size(); ++i) {
+            fprintf(f, "  {\"addr\":%lu,\"size\":%zu,\"type\":%d}%s\n",
+                reinterpret_cast<uintptr_t>(logs[i].address),
+                logs[i].size,
+                static_cast<int>(logs[i].type),
+                i + 1 < logs.size() ? "," : "");
+        }
+        fprintf(f, "]\n");
+        fprintf(f, "%s", HTML_SUFFIX);
+        fclose(f);
+        std::cout << "Saved self-contained visualizer to memtrace_report.html\n";
+    } else {
+        std::cerr << "Failed to open memtrace_report.html for writing\n";
+    }
 }
