@@ -51,14 +51,12 @@ private:
 
 thread_local Logger logger;
 
-// ── C bridge ──────────────────────────────────────────────────────────────────
 // The pass injects calls to THIS function. extern "C" kills name mangling so
 // the symbol in the .o is literally "logAccess", which is what the pass emits.
 extern "C" void logAccess(void* address, size_t size, int type) {
     logger.logAccess(static_cast<AccessType>(type), address, size);
 }
 
-// ── Analysis (your existing code, unchanged) ──────────────────────────────────
 static void printStrideStats(const std::vector<int>& strides, const std::string& label) {
     if (strides.empty()) {
         std::cout << label << ": No strides to analyze\n";

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmemtrace_rt.a CMakeFiles/memtrace_rt.dir/memtrace_rt.cpp.o
+/opt/homebrew/opt/llvm@18/bin/llvm-ranlib libmemtrace_rt.a
