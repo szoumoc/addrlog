@@ -161,7 +161,7 @@ void analyzeStrides() {
     for (size_t i = 1; i < read_addrs.size(); ++i) {
         int stride = static_cast<int>(read_addrs[i] - read_addrs[i-1]);
         read_strides.push_back(stride);
-        if ((read_addrs[i] >> CACHE_LINE_BITS) != (read_addrs[i-1] >> CACHE_LINE_BITS)) {
+        if ((read_addrs[i] >> CACHE_LINE_BITS) != (read_addrs[i-1] >> CACHE_LINE_BITS)) { // read_addrs[i]/128 != read_addrs[i-1]/128
             read_cache_changes++;
         }
     }
