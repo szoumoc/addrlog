@@ -36,11 +36,15 @@ struct MemTracePass : public PassInfoMixin<MemTracePass>
             Type::getInt32Ty(Ctx)           // arg 2: int (0=READ, 1=WRITE)
         );
 
+        // Declare analyzeAndPrint for the automatic call at program exit
+        FunctionCallee AnalyzeFunc = M->getOrInsertFunction(
+            "analyzeAndPrint",
+            Type::getVoidTy(Ctx)            // return type: void
+        );
+
         bool modified = false;
 
         for (auto& BB : F) {
-            // errs() << "  Instruction: " << I.getOpcodeName() << "\n";
-
             // Phase 1: collect all loads and stores
             std::vector<Instruction*> toInstrument;
             for (auto& I : BB) {
@@ -57,14 +61,15 @@ struct MemTracePass : public PassInfoMixin<MemTracePass>
                 if (auto* load = dyn_cast<LoadInst>(I)) {
                     ptr = load->getPointerOperand();
                     size = DL.getTypeStoreSize(load->getType());
-                    accessType = 0;
+                    accessType = 0;  // READ
                 }
                 else if (auto* store = dyn_cast<StoreInst>(I)) {
                     ptr = store->getPointerOperand();
                     size = DL.getTypeStoreSize(store->getValueOperand()->getType());
-                    accessType = 1;
+                    accessType = 1;  // WRITE
                 }
-
+                
+                // Check if we have a valid pointer
                 if (!ptr) continue;
 
                 IRBuilder<> builder(I);
@@ -77,6 +82,24 @@ struct MemTracePass : public PassInfoMixin<MemTracePass>
                 });
 
                 modified = true;
+            }
+
+            // Phase 3: If this is main(), insert analyzeAndPrint() before each return
+            if (F.getName() == "main") {
+                // Find all return instructions in the function
+                std::vector<ReturnInst*> returns;
+                for (auto& I : BB) {
+                    if (auto* ret = dyn_cast<ReturnInst>(&I)) {
+                        returns.push_back(ret);
+                    }
+                }
+                
+                // Insert analyzeAndPrint() before each return
+                for (auto* ret : returns) {
+                    IRBuilder<> builder(ret);
+                    builder.CreateCall(AnalyzeFunc);  // FIXED: Use AnalyzeFunc
+                    modified = true;
+                }
             }
         }
 

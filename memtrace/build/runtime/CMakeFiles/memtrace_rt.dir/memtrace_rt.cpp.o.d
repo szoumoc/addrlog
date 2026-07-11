@@ -1,9 +1,21 @@
 runtime/CMakeFiles/memtrace_rt.dir/memtrace_rt.cpp.o: \
   /Users/szoumo/Documents/sys/memtrace/runtime/memtrace_rt.cpp \
   /Users/szoumo/Documents/sys/memtrace/runtime/memtrace_rt.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/stddef.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/cstddef \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__assert \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__assertion_handler \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__config \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__config_site \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__verbose_abort \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__availability \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/enable_if.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/integral_constant.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/is_integral.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/remove_cv.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/remove_const.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/remove_volatile.h \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/version \
+  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/stddef.h \
   /opt/homebrew/Cellar/llvm@18/18.1.8/lib/clang/18/include/stddef.h \
   /opt/homebrew/Cellar/llvm@18/18.1.8/lib/clang/18/include/__stddef_ptrdiff_t.h \
   /opt/homebrew/Cellar/llvm@18/18.1.8/lib/clang/18/include/__stddef_size_t.h \
@@ -13,11 +25,6 @@ runtime/CMakeFiles/memtrace_rt.dir/memtrace_rt.cpp.o: \
   /opt/homebrew/Cellar/llvm@18/18.1.8/lib/clang/18/include/__stddef_max_align_t.h \
   /opt/homebrew/Cellar/llvm@18/18.1.8/lib/clang/18/include/__stddef_offsetof.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/iostream \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__assert \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__assertion_handler \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__verbose_abort \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__availability \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/version \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/ios \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__fwd/ios.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__fwd/string.h \
@@ -29,14 +36,7 @@ runtime/CMakeFiles/memtrace_rt.dir/memtrace_rt.cpp.o: \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__compare/three_way_comparable.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__compare/common_comparison_category.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__compare/ordering.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/enable_if.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/is_same.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/integral_constant.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/cstddef \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/is_integral.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/remove_cv.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/remove_const.h \
-  /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/remove_volatile.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__concepts/common_reference_with.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__concepts/convertible_to.h \
   /opt/homebrew/opt/llvm@18/bin/../include/c++/v1/__type_traits/is_convertible.h \
