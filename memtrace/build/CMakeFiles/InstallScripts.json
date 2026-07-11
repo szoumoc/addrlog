@@ -1,9 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Users/szoumo/Documents/sys/memtrace/build/cmake_install.cmake",
-		"/Users/szoumo/Documents/sys/memtrace/build/pass/cmake_install.cmake",
-		"/Users/szoumo/Documents/sys/memtrace/build/runtime/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
