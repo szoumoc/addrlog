@@ -51,8 +51,8 @@ private:
 
 thread_local Logger logger;
 
-// The pass injects calls to THIS function. extern "C" kills name mangling so
-// the symbol in the .o is literally "logAccess", which is what the pass emits.
+
+
 extern "C" void logAccess(void* address, size_t size, int type) {
     logger.logAccess(static_cast<AccessType>(type), address, size);
 }
@@ -96,9 +96,9 @@ static void printStrideStats(const std::vector<int>& strides, const std::string&
     }
 }
 
-// Called once at the end of the program to print everything.
-// We expose this as a plain C function too so the test can call it
-// without pulling in C++ headers.
+
+
+
 extern "C" void analyzeAndPrint() {
     std::vector<AccessLog> logs;
     logger.getLogs(logs);
@@ -120,9 +120,9 @@ extern "C" void analyzeAndPrint() {
             write_addrs.push_back(addr);
     }
 
-    const int CACHE_LINE_BITS = 7;   // 2^7 = 128 bytes
+    const int CACHE_LINE_BITS = 7;
 
-    // READ strides
+
     std::vector<int> read_strides;
     int read_cache_changes = 0;
     for (size_t i = 1; i < read_addrs.size(); ++i) {
@@ -135,7 +135,7 @@ extern "C" void analyzeAndPrint() {
         std::cout << "  READ cache line changes: " << read_cache_changes
                   << " (" << (100.0 * read_cache_changes / read_strides.size()) << "%)\n";
 
-    // WRITE strides
+
     std::vector<int> write_strides;
     int write_cache_changes = 0;
     for (size_t i = 1; i < write_addrs.size(); ++i) {

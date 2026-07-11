@@ -38,7 +38,7 @@ public:
         }
         buffer[slot] = {type, address, size};
     }
-    
+
     void getLogs(std::vector<AccessLog>& logs) const
     {
         logs.clear();
@@ -69,7 +69,7 @@ public:
         return sum;
     }
 private:
-    static const size_t MAX_LOGS = 1000000;  // Increased for larger workloads
+    static const size_t MAX_LOGS = 1000000;
     AccessLog buffer[MAX_LOGS];
     size_t LOG_INDEX = 0;
 };
@@ -93,13 +93,13 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
         std::cout << label << ": No strides to analyze\n";
         return;
     }
-    
+
     std::map<int, int> freq;
-    long long sum = 0;  // Use long long to avoid overflow
+    long long sum = 0;
     int zero_count = 0;
     int max_stride = INT_MIN;
     int min_stride = INT_MAX;
-    
+
     for (int s : strides) {
         freq[s]++;
         sum += s;
@@ -107,7 +107,7 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
         max_stride = std::max(max_stride, s);
         min_stride = std::min(min_stride, s);
     }
-    
+
     double avg = static_cast<double>(sum) / strides.size();
     std::cout << label << " strides:\n";
     std::cout << "  Total: " << strides.size() << "\n";
@@ -115,15 +115,15 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
     std::cout << "  Average: " << avg << " bytes\n";
     std::cout << "  Min: " << min_stride << " bytes\n";
     std::cout << "  Max: " << max_stride << " bytes\n";
-    std::cout << "  Zero strides: " << zero_count 
+    std::cout << "  Zero strides: " << zero_count
               << " (" << (100.0 * zero_count / strides.size()) << "%)\n";
-    
+
     std::cout << "  Most common strides:\n";
     int count = 0;
     for (const auto& pair : freq) {
         if (count++ >= 5) break;
         double percentage = 100.0 * pair.second / strides.size();
-        std::cout << "    " << pair.first << " bytes: " << pair.second 
+        std::cout << "    " << pair.first << " bytes: " << pair.second
                   << " (" << percentage << "%)\n";
     }
 }
@@ -131,18 +131,18 @@ void printStrideStats(const std::vector<int>& strides, const std::string& label)
 void analyzeStrides() {
     std::vector<AccessLog> logs;
     logger.getLogs(logs);
-    
+
     if (logs.size() < 2) {
         std::cout << "Not enough logs for stride analysis\n";
         return;
     }
-    
+
     std::cout << "\n=== OPTION B: Type-Separated Strides ===\n";
     std::cout << "Total log entries: " << logs.size() << "\n";
-    
+
     std::vector<uintptr_t> read_addrs;
     std::vector<uintptr_t> write_addrs;
-    
+
     for (const auto& log : logs) {
         uintptr_t addr = reinterpret_cast<uintptr_t>(log.address);
         if (log.type == AccessType::READ) {
@@ -151,25 +151,25 @@ void analyzeStrides() {
             write_addrs.push_back(addr);
         }
     }
-    
-    const int CACHE_LINE_BITS = 7;  // 2^7 = 128 bytes
+
+    const int CACHE_LINE_BITS = 7;
     int read_cache_changes = 0;
     int write_cache_changes = 0;
-    
-    // Analyze READ strides
+
+
     std::vector<int> read_strides;
     for (size_t i = 1; i < read_addrs.size(); ++i) {
         int stride = static_cast<int>(read_addrs[i] - read_addrs[i-1]);
         read_strides.push_back(stride);
-        if ((read_addrs[i] >> CACHE_LINE_BITS) != (read_addrs[i-1] >> CACHE_LINE_BITS)) { // read_addrs[i]/128 != read_addrs[i-1]/128
+        if ((read_addrs[i] >> CACHE_LINE_BITS) != (read_addrs[i-1] >> CACHE_LINE_BITS)) {
             read_cache_changes++;
         }
     }
     printStrideStats(read_strides, "READ");
-    std::cout << "  READ cache line changes: " << read_cache_changes 
+    std::cout << "  READ cache line changes: " << read_cache_changes
               << " (" << (100.0 * read_cache_changes / read_strides.size()) << "%)\n";
-    
-    // Analyze WRITE strides
+
+
     std::vector<int> write_strides;
     for (size_t i = 1; i < write_addrs.size(); ++i) {
         int stride = static_cast<int>(write_addrs[i] - write_addrs[i-1]);
@@ -179,24 +179,24 @@ void analyzeStrides() {
         }
     }
     printStrideStats(write_strides, "WRITE");
-    std::cout << "  WRITE cache line changes: " << write_cache_changes 
+    std::cout << "  WRITE cache line changes: " << write_cache_changes
               << " (" << (100.0 * write_cache_changes / write_strides.size()) << "%)\n";
 }
 
-// Sequential access test (large array)
+
 void funcTestSequential(int* data, int N) {
     std::cout << "Thread " << std::this_thread::get_id() << ": Starting SEQUENTIAL test (N=" << N << ")\n";
     logger.resetIndex();
-    
-    const int REPEATS = 1;  // One pass to avoid log overflow
-    
+
+    const int REPEATS = 1;
+
     for (int r = 0; r < REPEATS; ++r) {
         for (int i = 0; i < N; ++i) {
             loggedRead(&data[i]);
             loggedWrite(&data[i], i);
         }
     }
-    
+
     {
         std::unique_lock<std::mutex> lock(pmtx);
         analyzeStrides();
@@ -204,13 +204,13 @@ void funcTestSequential(int* data, int N) {
     }
 }
 
-// Random access test (large array with shuffled indices)
+
 void funcTestRandom(int* data, int* indices, int N) {
     std::cout << "Thread " << std::this_thread::get_id() << ": Starting RANDOM test (N=" << N << ")\n";
     logger.resetIndex();
-    
-    const int REPEATS = 1;  // One pass
-    
+
+    const int REPEATS = 1;
+
     for (int r = 0; r < REPEATS; ++r) {
         for (int i = 0; i < N; ++i) {
             int idx = indices[i];
@@ -218,7 +218,7 @@ void funcTestRandom(int* data, int* indices, int N) {
             loggedWrite(&data[idx], i);
         }
     }
-    
+
     {
         std::unique_lock<std::mutex> lock(pmtx);
         analyzeStrides();
@@ -227,35 +227,35 @@ void funcTestRandom(int* data, int* indices, int N) {
 }
 
 int main() {
-    // Choose size that exceeds cache but fits in log buffer
-    // Each access logs 24 bytes, so with 1M log entries we can track ~42K accesses
-    const int N = 10000;  // 10K ints = 40KB (exceeds L1 but fits in L2)
-    
+
+
+    const int N = 10000;
+
     int* data = new int[N];
     int* data2 = new int[N];
     int* indices = new int[N];
-    
-    // Initialize data
+
+
     for(int i = 0; i < N; ++i) {
         data[i] = i;
         data2[i] = i;
         indices[i] = i;
     }
-    
-    // Shuffle indices for random access
+
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::shuffle(indices, indices + N, gen);
-    
+
     {
-        // Test sequential vs random
+
         std::jthread t1(funcTestSequential, data, N);
         std::jthread t2(funcTestRandom, data2, indices, N);
     }
-    
+
     delete[] data;
     delete[] data2;
     delete[] indices;
-    
+
     return 0;
 }

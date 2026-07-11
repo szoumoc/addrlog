@@ -1,9 +1,9 @@
 #include <iostream>
 #include <random>
 #include <algorithm>
-// #include "memtrace_rt.h"
 
-extern "C" void analyzeAndPrint(); // 
+
+extern "C" void analyzeAndPrint();
 
 int main() {
     const int N = 10000;
@@ -22,13 +22,13 @@ int main() {
     std::mt19937 gen(rd());
     std::shuffle(indices, indices + N, gen);
 
-    // sequential
+
     for (int i = 0; i < N; ++i) {
         int x = data[i];
         data[i] = x + 1;
     }
 
-    // random
+
     for (int i = 0; i < N; ++i) {
         int idx   = indices[i];
         int x     = data2[idx];
