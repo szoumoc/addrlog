@@ -1,5 +1,6 @@
-/bench
+./bench
 /build
-/memory_tracer
-/memtrace/build
-/memtrace/test/test.cpp
+./memory_tracer
+./memtrace/build
+# /memtrace/test/test.cpp
+./vscode
