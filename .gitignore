@@ -1,3 +1,5 @@
 /bench
 /build
 /memory_tracer
+/memtrace/build
+/memtrace/test/test.cpp
